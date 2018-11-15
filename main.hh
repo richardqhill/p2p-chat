@@ -15,6 +15,7 @@ public:
 
 public slots:
 	void gotReturnPressed();
+    void processPendingDatagrams();
 
 private:
 	QTextEdit *textview;

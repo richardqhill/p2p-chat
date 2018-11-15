@@ -9,8 +9,10 @@
 
 #include "main.hh"
 
-ChatDialog::ChatDialog()
-{
+
+int myPort, portMin, portMax;
+
+ChatDialog::ChatDialog(){
 	setWindowTitle("P2Papp");
 
 	// Read-only text box where we display messages from everyone.
@@ -34,29 +36,29 @@ ChatDialog::ChatDialog()
 	layout->addWidget(textline);
 	setLayout(layout);
 
+	// Register a callback when another p2papp sends us a message over
+	// UDP
+	//connect(&QUdpSocket, SIGNAL(readyRead()),
+	//		this, SLOT(processPendingDatagrams()));
+
 	// Register a callback on the textline's returnPressed signal
 	// so that we can send the message entered by the user.
 	connect(textline, SIGNAL(returnPressed()),
 		this, SLOT(gotReturnPressed()));
 }
 
-void ChatDialog::gotReturnPressed()
-{
+void ChatDialog::processPendingDatagrams(){
+
+	;
+}
+
+void ChatDialog::gotReturnPressed(){
 
     QString msg = textline->text();
     textview->append(textline->text());
 
-
-
     // Clear the text line to get ready for the next input message.
     textline->clear();
-
-
-
-
-
-
-
 
     QMap<QString, QString> outMap, inMap;
     QByteArray mapData;
@@ -75,6 +77,14 @@ void ChatDialog::gotReturnPressed()
 
     qDebug() << "FIX: send message to other peers: " << inMap["ChatText"];
 
+    qDebug() << "My port is: " << myPort;
+
+    // To do: do not send to yourself and to the person the message came from
+	for(quint16 port=portMin; port<= portMax && port!=myPort; port++)
+	{
+		; //QUdpSocket::writeDatagram(&mapData, QHostAddress::LocalHost, port);
+
+	}
     // send to every port b/w 32768 to 49151
 
     //QUdpSocket::writeDatagram()
@@ -82,8 +92,7 @@ void ChatDialog::gotReturnPressed()
 
 }
 
-NetSocket::NetSocket()
-{
+NetSocket::NetSocket(){
 	// Pick a range of four UDP ports to try to allocate by default,
 	// computed based on my Unix user ID.
 	// This makes it trivial for up to four P2Papp instances per user
@@ -93,14 +102,18 @@ NetSocket::NetSocket()
 	// We use the range from 32768 to 49151 for this purpose.
 	myPortMin = 32768 + (getuid() % 4096)*4;
 	myPortMax = myPortMin + 3;
+
+	portMin = myPortMin;
+	portMax = myPortMax;
 }
 
-bool NetSocket::bind()
-{
+bool NetSocket::bind(){
 	// Try to bind to each of the range myPortMin..myPortMax in turn.
 	for (int p = myPortMin; p <= myPortMax; p++) {
 		if (QUdpSocket::bind(p)) {
 			qDebug() << "bound to UDP port " << p;
+			myPort = p;
+
 			return true;
 		}
 	}
@@ -110,8 +123,7 @@ bool NetSocket::bind()
 	return false;
 }
 
-int main(int argc, char **argv)
-{
+int main(int argc, char **argv){
 	// Initialize Qt toolkit
 	QApplication app(argc,argv);
 
