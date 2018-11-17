@@ -5,6 +5,15 @@
 #include <QTextEdit>
 #include <QLineEdit>
 #include <QUdpSocket>
+#include <unistd.h>
+#include <QVBoxLayout>
+#include <QApplication>
+#include <QDebug>
+#include <QFile>
+#include <QDataStream>
+#include <stdio.h>
+#include <stdlib.h>
+#include <algorithm>
 
 
 class NetSocket : public QUdpSocket
@@ -18,8 +27,7 @@ public:
     // Bind this socket to a P2Papp-specific default port.
     bool bind();
 
-    int getPort();
-    int myPortMin, myPortMax, port;
+    quint16 myPortMin, myPortMax, port;
 
 private:
 
@@ -44,14 +52,26 @@ private:
 	QTextEdit *textview;
 	QLineEdit *textline;
 
+    QTimer *timer;
     quint16 myPort;
-    quint16 mySeqNo;
+    QString myOrigin;
+    quint32 mySeqNo;
 
-    QMap <QString, QString> outgoing_messages;
+
+    // chatLogs: <Origin, <SeqNo, Message>>
+    QMap<QString, QMap<quint32, QString>> chatLogs;
+
+    // statusMap: <Origin, LastSeqNo + 1>
+    QMap<QString, quint32> statusMap;
 
 
+
+    void sendRumorMessage(QString origin, quint32 seqNo);
     void serializeMessage(QVariantMap &myMap);
     void deserializeMessage(QByteArray datagram);
+    void receiveRumorMessage(QVariantMap inMap);
+    void sendStatusMessage();
+    void receiveStatusMessage(QVariantMap inMap);
 
 
 };

@@ -1,12 +1,4 @@
-#include <unistd.h>
-#include <QVBoxLayout>
-#include <QApplication>
-#include <QDebug>
-#include <QFile>
-#include <QDataStream>
-#include <string>
 #include "main.hh"
-
 
 ChatDialog::ChatDialog(){
 
@@ -15,12 +7,19 @@ ChatDialog::ChatDialog(){
 		exit(1);
 	}
     else {
-		myPort = mySocket->getPort();
+		myPort = mySocket->port;
 	}
 
 	mySeqNo = 0;
 
-    setWindowTitle("P2Papp");
+    // myOrigin
+	//myOrigin = QString::number(rand() % 100 + 1) + QString::number(0) + QString::number(myPort);
+	myOrigin = QString::number(myPort);
+	qDebug() << "myOrigin: " << myOrigin;
+	qDebug() << "-------------------";
+	//timer = new QTimer(this);
+
+    setWindowTitle("P2Papp " + myOrigin);
 
 	textview = new QTextEdit(this);
 	textview->setReadOnly(true);
@@ -41,34 +40,59 @@ ChatDialog::ChatDialog(){
 
 void ChatDialog::gotReturnPressed(){
 
-	textview->append(QString(myPort)); // prints out chinese character, need to cast?
-	textview->append(textline->text());
-
+	textview->append("Origin " + myOrigin + ": " + textline->text());
 	QString msg = textline->text();
-	outgoing_messages.insert("ChatText", msg);
 
+	QMap<quint32, QString> chatLogEntry;
+	chatLogEntry.insert(mySeqNo, msg);
 
+	if(!chatLogs.contains(myOrigin)){
+		chatLogs.insert(myOrigin, chatLogEntry);
+		statusMap.insert(myOrigin, mySeqNo +1);
+		qDebug() << "statusMap at origin: " + QString::number(statusMap[myOrigin]);
+	}
+	else{
+		chatLogs[myOrigin].insert(mySeqNo, msg);
+		statusMap[myOrigin] = mySeqNo + 1;
+		qDebug() << "statusMap at origin: " + QString::number(statusMap[myOrigin]);
+	}
 
-
-
-
-    //serialize
-    QByteArray outData;
-    QDataStream outStream(&outData, QIODevice::WriteOnly); //Constructs a data stream that operates on a byte array
-    outStream << outgoing_messages;
-
-    for(int i = mySocket->myPortMin; i<= mySocket->myPortMax; i++){
-        mySocket->writeDatagram(outData.data(), outData.size(), QHostAddress::LocalHost, i);
-    }
-
-
-	//createRumorMessage(QString(myPort), quint16(mySeqNo));
-
-
+	sendRumorMessage(myOrigin, mySeqNo);
 	mySeqNo += 1;
 
 	// Clear the text line to get ready for the next input message.
 	textline->clear();
+}
+
+
+void ChatDialog::sendRumorMessage(QString origin, quint32 seqNo){
+
+	if(!chatLogs.contains(origin) || !chatLogs[origin].contains(seqNo))
+		return;
+
+	QVariantMap rumorMap;
+
+	rumorMap.insert(QString("ChatText"), chatLogs[origin].value(seqNo));
+	rumorMap.insert(QString("Origin"), origin);
+	rumorMap.insert(QString("SeqNo"), seqNo);
+
+	serializeMessage(rumorMap);
+}
+
+
+void ChatDialog::serializeMessage(QVariantMap &outMap){
+
+	QByteArray outData;
+	QDataStream outStream(&outData, QIODevice::WriteOnly);
+	outStream << outMap;
+
+	// Pick a random neighbor to send this to   TO DO
+	for(int i = mySocket->myPortMin; i<= mySocket->myPortMax; i++){
+		if(i != myPort){
+			qDebug() << "Sent message to: " + QString::number(i);
+			mySocket->writeDatagram(outData.data(), outData.size(), QHostAddress::LocalHost, i);
+		}
+	}
 }
 
 
@@ -77,10 +101,8 @@ void ChatDialog::processPendingDatagrams(){
 	while(mySocket->hasPendingDatagrams()){
 		QByteArray datagram;
 		datagram.resize(mySocket->pendingDatagramSize());
-        QHostAddress sender;
-        quint16 senderPort;
 
-		if(mySocket->readDatagram(datagram.data(), datagram.size(), &sender, &senderPort) != -1)
+		if(mySocket->readDatagram(datagram.data(), datagram.size(), NULL, NULL) != -1)
 			deserializeMessage(datagram);
 		else
 			return;
@@ -90,16 +112,82 @@ void ChatDialog::processPendingDatagrams(){
 void ChatDialog::deserializeMessage(QByteArray datagram) {
 
 	QDataStream inStream(&datagram, QIODevice::ReadOnly);
-    QMap<QString, QString> inMap;
+	QVariantMap inMap;
 	inStream >> inMap;
 
-    qDebug() << inMap;
+
+	qDebug() << inMap;
+
+    if(inMap.contains("ChatText"))
+    	receiveRumorMessage(inMap);
+    else if (inMap.contains("Want"))
+		receiveStatusMessage(inMap);
 
 }
 
 
+void ChatDialog::receiveRumorMessage(QVariantMap inMap){
+
+	QString origin = inMap.value("Origin").value <QString> ();
+	quint32 seqNo = inMap.value("SeqNo").value <quint32> ();
+	QString msg = inMap.value("ChatText").value <QString> ();
+
+	//qDebug() << "Origin: " << origin << " SeqNo: " << seqNo << " Msg: " << msg;
+
+	QMap<quint32, QString> chatLogEntry;
+	chatLogEntry.insert(seqNo, msg);
 
 
+	// For convenience, discard any message with OOO seq number
+	// If chatLogs does not contain messages from this origin, we expect message with seqNo 0
+	if(!chatLogs.contains(origin)){
+		if(seqNo == 0){
+			chatLogs.insert(origin, chatLogEntry);
+			statusMap.insert(origin, seqNo + 1);
+			textview->append("Origin " + origin + ": " + msg);
+
+			//qDebug() << "Logged new entry with seq no: 0";
+			//qDebug() << "Status map: expecting next seq num: " + QString::number(statusMap[origin]);
+		}
+	}
+	else{
+		//If chatLogs does contain messages from this origin, we expect message with seqNo = previous seq num + 1
+		quint32 lastSeqNum = chatLogs[origin].keys().last();
+		//qDebug() << "Last seq Num: " + QString::number(lastSeqNum);
+
+		if (seqNo == lastSeqNum + 1){
+			chatLogs.insert(origin, chatLogEntry);
+			statusMap[origin] = seqNo + 1;
+			textview->append("Origin " + origin + ": " + msg);
+
+			//qDebug() << "Logged new entry with seq no: " << QString::number(seqNo);
+			//qDebug() << "Status map: expecting next seq num: " + QString::number(statusMap[origin]);
+		}
+	}
+	sendStatusMessage();
+}
+
+
+
+void ChatDialog::sendStatusMessage(){
+
+
+	QVariantMap statusMessage;
+
+	statusMessage.insert(QString("Want"), QMap("Want"));
+
+
+
+	serializeMessage(statusMessage);
+
+}
+
+
+void ChatDialog::receiveStatusMessage(QVariantMap inMap){
+
+	qDebug() << "I got a status message!";
+
+}
 
 
 
@@ -125,10 +213,6 @@ bool NetSocket::bind(){
 	}
 	qDebug() << "Oops, no ports in my default range " << myPortMin << "-" << myPortMax << " available";
 	return false;
-}
-
-int NetSocket::getPort(){
-    return port;
 }
 
 int main(int argc, char **argv){
