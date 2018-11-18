@@ -17,7 +17,6 @@ ChatDialog::ChatDialog(){
 	myOrigin = QString::number(myPort);
 	qDebug() << "myOrigin: " << myOrigin;
 	qDebug() << "-------------------";
-	//timer = new QTimer(this);
 
     setWindowTitle("P2Papp " + myOrigin);
 
@@ -36,11 +35,14 @@ ChatDialog::ChatDialog(){
     // Register a callback when another p2papp sends us a message over UDP
     connect(mySocket, SIGNAL(readyRead()),
     		this, SLOT(processPendingDatagrams()));
+
+    timer = new QTimer(this);
+    connect(timer, SIGNAL(timeout()), this, SLOT(reinvokeRumorMongering()));
 }
 
 void ChatDialog::gotReturnPressed(){
 
-	textview->append("Origin " + myOrigin + ": " + textline->text());
+	textview->append(myOrigin + ": " + textline->text());
 	QString msg = textline->text();
 
 	QMap<quint32, QString> chatLogEntry;
@@ -49,21 +51,17 @@ void ChatDialog::gotReturnPressed(){
 	if(!chatLogs.contains(myOrigin)){
 		chatLogs.insert(myOrigin, chatLogEntry);
 		statusMap.insert(myOrigin, QVariant(mySeqNo +1));
-		//qDebug() << "statusMap at origin: " + QString::number(statusMap[myOrigin]);
 	}
 	else{
 		chatLogs[myOrigin].insert(mySeqNo, msg);
 		statusMap[myOrigin] = QVariant(mySeqNo + 1);
-		//qDebug() << "statusMap at origin: " + QString::number(statusMap[myOrigin]);
 	}
 
 	sendRumorMessage(myOrigin, mySeqNo);
 	mySeqNo += 1;
 
-	// Clear the text line to get ready for the next input message.
 	textline->clear();
 }
-
 
 void ChatDialog::sendRumorMessage(QString origin, quint32 seqNo){
 
@@ -92,6 +90,15 @@ void ChatDialog::serializeMessage(QVariantMap &outMap){
 			mySocket->writeDatagram(outData.data(), outData.size(), QHostAddress::LocalHost, i);
 		}
 	}
+	activateTimeout();
+}
+
+void ChatDialog::activateTimeout(){
+    timer->start(3000);
+}
+
+void ChatDialog::reinvokeRumorMongering(){
+    sendRumorMessage(myOrigin, mySeqNo);
 }
 
 void ChatDialog::processPendingDatagrams(){
@@ -126,11 +133,8 @@ void ChatDialog::receiveRumorMessage(QVariantMap inMap){
 	quint32 seqNo = inMap.value("SeqNo").value <quint32> ();
 	QString msg = inMap.value("ChatText").value <QString> ();
 
-	//qDebug() << "Origin: " << origin << " SeqNo: " << seqNo << " Msg: " << msg;
-
 	QMap<quint32, QString> chatLogEntry;
 	chatLogEntry.insert(seqNo, msg);
-
 
 	// For convenience, discard any message with OOO seq number
 	// If chatLogs does not contain messages from this origin, we expect message with seqNo 0
@@ -138,21 +142,20 @@ void ChatDialog::receiveRumorMessage(QVariantMap inMap){
 		if(seqNo == 0){
 			chatLogs.insert(origin, chatLogEntry);
 			statusMap.insert(origin, QVariant(seqNo + 1));
-			textview->append("Origin " + origin + ": " + msg);
+			textview->append(origin + ": " + msg);
 
 			//qDebug() << "Logged new entry with seq no: 0";
 			//qDebug() << "Status map: expecting next seq num: " + QString::number(statusMap[origin].value <quint32> ());
 		}
 	}
 	else{
-		//If chatLogs does contain messages from this origin, we expect message with seqNo = previous seq num + 1
+		//If chatLogs *does* contain this origin, we expect message with seqNo = last seq num + 1
 		quint32 lastSeqNum = chatLogs[origin].keys().last();
-		//qDebug() << "Last seq Num: " + QString::number(lastSeqNum);
 
 		if (seqNo == lastSeqNum + 1){
 			chatLogs.insert(origin, chatLogEntry);
 			statusMap[origin] = QVariant(seqNo + 1);
-			textview->append("Origin " + origin + ": " + msg);
+			textview->append(origin + ": " + msg);
 
 			//qDebug() << "Logged new entry with seq no: " << QString::number(seqNo);
             //qDebug() << "Status map: expecting next seq num: " + QString::number(statusMap[origin].value <quint32> ());
@@ -174,10 +177,16 @@ void ChatDialog::sendStatusMessage(){
 
 void ChatDialog::receiveStatusMessage(QVariantMap inMap){
 
-	QVariantMap debug2 = inMap["Want"].value <QVariantMap> ();
-	qDebug() << "I got a status message!";
-	qDebug() << debug2;
+    qDebug() << "I got a status message!";
 
+	QVariantMap recvStatusMap = inMap["Want"].value <QVariantMap> ();
+	QList<QString> recvOriginList = recvStatusMap.keys();
+
+	for(int i=0; i< recvOriginList.count(); i++){
+
+	    qDebug() << "recvStatusMap origin " + recvOriginList[i] + " with expected seqNo: " +
+	    QString::number(recvStatusMap[recvOriginList[i]].value <quint32> ());
+	}
 }
 
 
