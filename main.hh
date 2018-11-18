@@ -62,7 +62,7 @@ private:
     QMap<QString, QMap<quint32, QString>> chatLogs;
 
     // statusMap: <Origin, LastSeqNo + 1>
-    QMap<QString, quint32> statusMap;
+    QVariantMap statusMap;
 
 
 

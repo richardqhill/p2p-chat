@@ -48,13 +48,13 @@ void ChatDialog::gotReturnPressed(){
 
 	if(!chatLogs.contains(myOrigin)){
 		chatLogs.insert(myOrigin, chatLogEntry);
-		statusMap.insert(myOrigin, mySeqNo +1);
-		qDebug() << "statusMap at origin: " + QString::number(statusMap[myOrigin]);
+		statusMap.insert(myOrigin, QVariant(mySeqNo +1));
+		//qDebug() << "statusMap at origin: " + QString::number(statusMap[myOrigin]);
 	}
 	else{
 		chatLogs[myOrigin].insert(mySeqNo, msg);
-		statusMap[myOrigin] = mySeqNo + 1;
-		qDebug() << "statusMap at origin: " + QString::number(statusMap[myOrigin]);
+		statusMap[myOrigin] = QVariant(mySeqNo + 1);
+		//qDebug() << "statusMap at origin: " + QString::number(statusMap[myOrigin]);
 	}
 
 	sendRumorMessage(myOrigin, mySeqNo);
@@ -78,7 +78,6 @@ void ChatDialog::sendRumorMessage(QString origin, quint32 seqNo){
 
 	serializeMessage(rumorMap);
 }
-
 
 void ChatDialog::serializeMessage(QVariantMap &outMap){
 
@@ -138,11 +137,11 @@ void ChatDialog::receiveRumorMessage(QVariantMap inMap){
 	if(!chatLogs.contains(origin)){
 		if(seqNo == 0){
 			chatLogs.insert(origin, chatLogEntry);
-			statusMap.insert(origin, seqNo + 1);
+			statusMap.insert(origin, QVariant(seqNo + 1));
 			textview->append("Origin " + origin + ": " + msg);
 
 			//qDebug() << "Logged new entry with seq no: 0";
-			//qDebug() << "Status map: expecting next seq num: " + QString::number(statusMap[origin]);
+			//qDebug() << "Status map: expecting next seq num: " + QString::number(statusMap[origin].value <quint32> ());
 		}
 	}
 	else{
@@ -152,11 +151,11 @@ void ChatDialog::receiveRumorMessage(QVariantMap inMap){
 
 		if (seqNo == lastSeqNum + 1){
 			chatLogs.insert(origin, chatLogEntry);
-			statusMap[origin] = seqNo + 1;
+			statusMap[origin] = QVariant(seqNo + 1);
 			textview->append("Origin " + origin + ": " + msg);
 
 			//qDebug() << "Logged new entry with seq no: " << QString::number(seqNo);
-			//qDebug() << "Status map: expecting next seq num: " + QString::number(statusMap[origin]);
+            //qDebug() << "Status map: expecting next seq num: " + QString::number(statusMap[origin].value <quint32> ());
 		}
 	}
 	sendStatusMessage();
@@ -166,35 +165,8 @@ void ChatDialog::receiveRumorMessage(QVariantMap inMap){
 
 void ChatDialog::sendStatusMessage(){
 
-
-
-	QVariantMap foo;
-	foo.insert(QString("A"), QString("B"));
-	foo["A"] = QString("D");
-
-	QMap<QString, QVariant> foobar = foo;
-
-	QVariantMap bar;
-	bar.insert(QString("C"), foobar);
-
-
-	qDebug() << foo;
-	qDebug() << foo.value("A");
-	qDebug() << bar;
-	qDebug() << bar.value("C");
-
-
-	/*QMap<QString, QMap<QString, quint32>> dbgStatusMsg;
-	dbgStatusMsg.insert(QString("Want"), statusMap);
-	*/
-
-
-
-
-
-
 	QVariantMap statusMessage;
-	statusMessage.insert(QString("Want"), QString("Want"));
+	statusMessage.insert(QString("Want"), statusMap);
 	serializeMessage(statusMessage);
 
 }
@@ -202,8 +174,9 @@ void ChatDialog::sendStatusMessage(){
 
 void ChatDialog::receiveStatusMessage(QVariantMap inMap){
 
-	QVariantMap debug = inMap;
+	QVariantMap debug2 = inMap["Want"].value <QVariantMap> ();
 	qDebug() << "I got a status message!";
+	qDebug() << debug2;
 
 }
 
