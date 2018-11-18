@@ -86,15 +86,14 @@ void ChatDialog::serializeMessage(QVariantMap &outMap){
 	QDataStream outStream(&outData, QIODevice::WriteOnly);
 	outStream << outMap;
 
-	// Pick a random neighbor to send this to   TO DO
+	// Pick a random neighbor to send this to   TO DO !!!!
 	for(int i = mySocket->myPortMin; i<= mySocket->myPortMax; i++){
 		if(i != myPort){
-			qDebug() << "Sent message to: " + QString::number(i);
+			//qDebug() << "Sent message to: " + QString::number(i);
 			mySocket->writeDatagram(outData.data(), outData.size(), QHostAddress::LocalHost, i);
 		}
 	}
 }
-
 
 void ChatDialog::processPendingDatagrams(){
 
@@ -115,16 +114,12 @@ void ChatDialog::deserializeMessage(QByteArray datagram) {
 	QVariantMap inMap;
 	inStream >> inMap;
 
-
-	qDebug() << inMap;
-
     if(inMap.contains("ChatText"))
     	receiveRumorMessage(inMap);
     else if (inMap.contains("Want"))
 		receiveStatusMessage(inMap);
 
 }
-
 
 void ChatDialog::receiveRumorMessage(QVariantMap inMap){
 
@@ -172,12 +167,34 @@ void ChatDialog::receiveRumorMessage(QVariantMap inMap){
 void ChatDialog::sendStatusMessage(){
 
 
+
+	QVariantMap foo;
+	foo.insert(QString("A"), QString("B"));
+	foo["A"] = QString("D");
+
+	QMap<QString, QVariant> foobar = foo;
+
+	QVariantMap bar;
+	bar.insert(QString("C"), foobar);
+
+
+	qDebug() << foo;
+	qDebug() << foo.value("A");
+	qDebug() << bar;
+	qDebug() << bar.value("C");
+
+
+	/*QMap<QString, QMap<QString, quint32>> dbgStatusMsg;
+	dbgStatusMsg.insert(QString("Want"), statusMap);
+	*/
+
+
+
+
+
+
 	QVariantMap statusMessage;
-
-	statusMessage.insert(QString("Want"), QMap("Want"));
-
-
-
+	statusMessage.insert(QString("Want"), QString("Want"));
 	serializeMessage(statusMessage);
 
 }
@@ -185,6 +202,7 @@ void ChatDialog::sendStatusMessage(){
 
 void ChatDialog::receiveStatusMessage(QVariantMap inMap){
 
+	QVariantMap debug = inMap;
 	qDebug() << "I got a status message!";
 
 }
