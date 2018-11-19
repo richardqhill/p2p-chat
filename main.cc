@@ -71,6 +71,8 @@ void ChatDialog::gotReturnPressed(){
 
 quint16 ChatDialog::pickClosestNeighbor(){
 
+    qDebug() << "Picking closest neighbor";
+
     int maxAttempts = 10;
     quint16 neighborPort;
 
@@ -82,8 +84,8 @@ quint16 ChatDialog::pickClosestNeighbor(){
 
     // Send ping, collect ping reply to determine which neighbor is closer
     else{
-        quint16 n1 = myPort + 1;
-        quint16 n2 = myPort - 1;
+        quint16 n1 = myPort - 1;
+        quint16 n2 = myPort + 1;
 
         n1Timer = new QElapsedTimer();
         n1Timer->start();
@@ -102,6 +104,9 @@ quint16 ChatDialog::pickClosestNeighbor(){
             serializeMessage(pingMapN1, n1);
             serializeMessage(pingMapN2, n2);
             processPendingDatagrams();
+
+            // Sleep for 0.1 seconds to allow for time for ping reply
+            usleep(100);
             attempts++;
         }
 
@@ -116,8 +121,11 @@ quint16 ChatDialog::pickClosestNeighbor(){
             neighborPort = n2;
 
         // Reset timer states
+        attempts =0;
         delete n1Timer;
         delete n2Timer;
+        n1Timer = nullptr;
+        n2Timer = nullptr;
         n1Time = QINT64MAX;
         n2Time = QINT64MAX;
     }
@@ -215,11 +223,11 @@ void ChatDialog::processPendingDatagrams(){
                 qDebug() << "Received Ping Reply: " << inMap["PingReply"];
 
                 if(inMap["PingReply"] == QVariant(1)) {
-                    if(n1Time == QINT64MAX)
+                    if(n1Time == QINT64MAX && n1Timer != nullptr)
                         n1Time = n1Timer->elapsed();
                 }
                 else {
-                    if(n2Time == QINT64MAX)
+                    if(n2Time == QINT64MAX && n2Timer != nullptr)
                         n2Time = n2Timer->elapsed();
                 }
             }

@@ -51,8 +51,8 @@ private:
 
     QTimer *resendTimer;
     QTimer *antiEntropyTimer;
-    QElapsedTimer *n1Timer;
-    QElapsedTimer *n2Timer;
+    QElapsedTimer *n1Timer = nullptr;
+    QElapsedTimer *n2Timer = nullptr;
     qint64 n1Time = QINT64MAX;
     qint64 n2Time = QINT64MAX;
 
