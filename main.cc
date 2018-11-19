@@ -169,7 +169,7 @@ void ChatDialog::receiveRumorMessage(QVariantMap inMap, quint16 sourcePort){
 	// For convenience, discard any message with OOO seq number
 	// If chatLogs does not contain messages from this origin, we expect message with seqNo 0
 	if(!chatLogs.contains(origin)){
-		if(seqNo != 0)
+		if(seqNo != 1)
 		    return;
 
         chatLogs.insert(origin, chatLogEntry);
@@ -188,6 +188,7 @@ void ChatDialog::receiveRumorMessage(QVariantMap inMap, quint16 sourcePort){
 		}
 	}
 	sendStatusMessage(sourcePort);
+	sendRumorMessage(origin, seqNo, pickRandomNeighbor());
 }
 
 void ChatDialog::sendStatusMessage(quint16 destPort){
@@ -206,9 +207,12 @@ void ChatDialog::receiveStatusMessage(QVariantMap inMap, quint16 sourcePort){
 	QList<QString> recvOriginList = recvStatusMap.keys();
     QList<QString> myOriginList = statusMap.keys();
 
+    qDebug() << "recvStatusMap: " << recvStatusMap;
+    qDebug() << "myStatusMap: " << statusMap;
+
 	for(int i=0; i < myOriginList.count(); i++){
 	    if(!recvOriginList.contains(myOriginList[i])) {
-            sendRumorMessage(myOriginList[i], 0, sourcePort);
+            sendRumorMessage(myOriginList[i], 1, sourcePort);
             return;
         }
 	}
