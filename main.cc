@@ -80,6 +80,7 @@ quint16 ChatDialog::pickClosestNeighbor(){
     else if(myPort == mySocket->myPortMax)
         neighborPort = myPort-1;
 
+    // Send ping, collect ping reply to determine which neighbor is closer
     else{
         quint16 n1 = myPort + 1;
         quint16 n2 = myPort - 1;
@@ -93,7 +94,8 @@ quint16 ChatDialog::pickClosestNeighbor(){
         pingMapN1.insert(QString("Ping"), QVariant(1));
         pingMapN2.insert(QString("Ping"), QVariant(2));
 
-        // It's possible not to get a response from one neighbor or both neighbors
+        // It's possible to NOT get a response from one neighbor or both neighbors.
+        // Need max attempts in case both neighbors are down or else hangs forever.
         int attempts = 0;
         while (n1Time == QINT64MAX && n2Time == QINT64MAX && attempts <= maxAttempts) {
             qDebug() << "Sending pings to both neighbors";
@@ -113,7 +115,7 @@ quint16 ChatDialog::pickClosestNeighbor(){
         else
             neighborPort = n2;
 
-        attempts = 0;
+        // Reset timer states
         delete n1Timer;
         delete n2Timer;
         n1Time = QINT64MAX;

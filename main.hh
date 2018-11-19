@@ -17,10 +17,9 @@
 #include <stdlib.h>
 #include <limits>
 
-
-#define QINT64MAX std::numeric_limits<qint64>::max()
 // We start Seq No at 1 because an empty entry in QVariantMap returns 0
 #define SEQNOSTART 1
+#define QINT64MAX std::numeric_limits<qint64>::max()
 
 class NetSocket : public QUdpSocket
 {
