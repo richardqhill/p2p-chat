@@ -19,6 +19,7 @@
 
 
 #define QINT64MAX std::numeric_limits<qint64>::max()
+// We start Seq No at 1 because an empty entry in QVariantMap returns 0
 #define SEQNOSTART 1
 
 class NetSocket : public QUdpSocket
@@ -37,7 +38,6 @@ class ChatDialog : public QDialog
 
 public:
     ChatDialog();
-
     NetSocket* mySocket;
 
 public slots:
@@ -46,14 +46,12 @@ public slots:
     void antiEntropy();
     void resendRumor();
 
-
 private:
 	QTextEdit *textview;
 	QLineEdit *textline;
 
     QTimer *resendTimer;
     QTimer *antiEntropyTimer;
-
     QElapsedTimer *n1Timer;
     QElapsedTimer *n2Timer;
     qint64 n1Time = QINT64MAX;
@@ -69,7 +67,7 @@ private:
     // statusMap: <Origin, QVariant(LastSeqNo + 1)>
     QVariantMap statusMap;
 
-    // last sent rumor message
+    // Last sent rumor message
     quint16 lastRumorPort;
     QString lastRumorOrigin;
     quint32 lastRumorSeqNo;
