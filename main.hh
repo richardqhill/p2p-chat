@@ -15,6 +15,9 @@
 #include <unistd.h>
 #include <stdlib.h>
 
+
+
+
 class NetSocket : public QUdpSocket
 {
     Q_OBJECT
@@ -32,6 +35,7 @@ private:
 
 };
 
+#define EXPECTING_STATUS_MESSAGE 1
 
 
 class ChatDialog : public QDialog
@@ -46,24 +50,20 @@ public:
 public slots:
 	void gotReturnPressed();
     void processPendingDatagrams();
-    void clearCurrentPeer();
-    void reinvokeRumorMongering();
+    void antiEntropy();
+    void resendRumor();
 
 
 private:
 	QTextEdit *textview;
 	QLineEdit *textline;
 
-    QTimer *reinvokeTimer;
-    QTimer *newPeerTimer;
+    QTimer *resendTimer;
+    QTimer *antiEntropyTimer;
 
     quint16 myPort;
     QString myOrigin;
     quint32 mySeqNo;
-
-    QHostAddress* peerAddress = nullptr;
-    quint16* peerPort = nullptr;
-
 
     // chatLogs: <Origin, <SeqNo, Message>>
     QMap<QString, QMap<quint32, QString>> chatLogs;
@@ -71,11 +71,21 @@ private:
     // statusMap: <Origin, QVariant(LastSeqNo + 1)>
     QVariantMap statusMap;
 
-    void sendRumorMessage(QString origin, quint32 seqNo);
-    void serializeMessage(QVariantMap &myMap);
+    // last sent rumor message
+    quint16 lastRumorPort;
+    QString lastRumorOrigin;
+    quint32 lastRumorSeqNo;
+
+
+
+
+
+    quint16 pickRandomNeighbor();
+    void sendRumorMessage(QString origin, quint32 seqNo, quint16 destPort);
+    void serializeMessage(QVariantMap &myMap, quint16 destPort);
     void deserializeMessage(QByteArray datagram);
-    void receiveRumorMessage(QVariantMap inMap);
-    void sendStatusMessage();
+    void receiveRumorMessage(QVariantMap inMap, quint16 sourcePort);
+    void sendStatusMessage(quint16 destPort);
     void receiveStatusMessage(QVariantMap inMap);
 
 

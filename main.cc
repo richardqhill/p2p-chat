@@ -38,11 +38,12 @@ ChatDialog::ChatDialog(){
     connect(mySocket, SIGNAL(readyRead()),
     		this, SLOT(processPendingDatagrams()));
 
-    newPeerTimer = new QTimer(this);
-    connect(newPeerTimer, SIGNAL(timeout()), this, SLOT(clearCurrentPeer()));
+    antiEntropyTimer = new QTimer(this);
+    connect(antiEntropyTimer, SIGNAL(timeout()), this, SLOT(antiEntropy()));
+    antiEntropyTimer->start(10000);
 
-    reinvokeTimer = new QTimer(this);
-    connect(reinvokeTimer, SIGNAL(timeout()), this, SLOT(reinvokeRumorMongering()));
+    resendTimer = new QTimer(this);
+    connect(resendTimer, SIGNAL(timeout()), this, SLOT(resendRumor()));
 }
 
 void ChatDialog::gotReturnPressed(){
@@ -65,13 +66,28 @@ void ChatDialog::gotReturnPressed(){
 		statusMap[myOrigin] = QVariant(mySeqNo + 1);
 	}
 
-	sendRumorMessage(myOrigin, mySeqNo);
+	sendRumorMessage(myOrigin, mySeqNo, pickRandomNeighbor());
 	mySeqNo += 1;
 
 	textline->clear();
 }
 
-void ChatDialog::sendRumorMessage(QString origin, quint32 seqNo){
+quint16 ChatDialog::pickRandomNeighbor() {
+
+    if(myPort == mySocket->myPortMin)
+        return myPort+1;
+
+    else if(myPort == mySocket->myPortMax)
+        return myPort-1;
+
+    else if (qrand() % 2 ==0)
+        return myPort+1;
+
+    else
+        return myPort-1;
+}
+
+void ChatDialog::sendRumorMessage(QString origin, quint32 seqNo, quint16 destPort){
 
 	if(!chatLogs.contains(origin) || !chatLogs[origin].contains(seqNo))
 		return;
@@ -82,49 +98,35 @@ void ChatDialog::sendRumorMessage(QString origin, quint32 seqNo){
 	rumorMap.insert(QString("Origin"), origin);
 	rumorMap.insert(QString("SeqNo"), seqNo);
 
-	serializeMessage(rumorMap);
+	serializeMessage(rumorMap, destPort);
+
+    // Start Timer looking for response
+    resendTimer->start(3000);
+    lastRumorPort = destPort;
+    lastRumorOrigin = origin;
+    lastRumorSeqNo = seqNo;
 }
 
-void ChatDialog::serializeMessage(QVariantMap &outMap){
+void ChatDialog::serializeMessage(QVariantMap &outMap, quint16 destPort){
 
 	QByteArray outData;
 	QDataStream outStream(&outData, QIODevice::WriteOnly);
 	outStream << outMap;
 
+    mySocket->writeDatagram(outData.data(), outData.size(), QHostAddress::LocalHost, destPort);
 
-	//If we have a peer, send messages to peer. If not, sent to every valid port on this machine to pick a new peer
-	if(peerAddress != nullptr){
-        qDebug() << "Sent a message to peer!";
-	    mySocket->writeDatagram(outData.data(), outData.size(), *peerAddress, *peerPort);
-	}
-	else{
-        for(int i = mySocket->myPortMin; i<= mySocket->myPortMax; i++){
-            if(i != myPort){
-                qDebug() << "Sent a message to port: " << i;
-                mySocket->writeDatagram(outData.data(), outData.size(), QHostAddress::LocalHost, i);
-            }
-        }
 
-        // Start Timer looking for response
-        //newPeerTimer->start(2000);
-        reinvokeTimer->start(3000);
-	}
+
 }
 
-void ChatDialog::clearCurrentPeer() {
-    qDebug() << "Clearing current peer";
-    delete peerAddress;
-    peerAddress = nullptr;
-    delete peerPort;
-    peerPort = nullptr;
+void ChatDialog::antiEntropy() {
+    qDebug() << "Anti Entropy!";
+    sendStatusMessage(pickRandomNeighbor());
 }
 
-void ChatDialog::reinvokeRumorMongering(){
-
-    qDebug() << "Reinvoke rumor mongering!";
-
-    // Send the last message I have sent (mySeqNo - 1)
-    sendRumorMessage(myOrigin, mySeqNo-1);
+void ChatDialog::resendRumor(){
+    qDebug() << "Resending rumor because no status message!";
+    sendRumorMessage(lastRumorOrigin, lastRumorSeqNo, lastRumorPort);
 }
 
 void ChatDialog::processPendingDatagrams(){
@@ -132,45 +134,36 @@ void ChatDialog::processPendingDatagrams(){
 	while(mySocket->hasPendingDatagrams()){
 		QByteArray datagram;
 		datagram.resize(mySocket->pendingDatagramSize());
-        QHostAddress sender;
-        quint16 senderPort;
+        QHostAddress source;
+        quint16 sourcePort;
 
-		if(mySocket->readDatagram(datagram.data(), datagram.size(), &sender, &senderPort) != -1){
-
-		    // If we don't have a peer yet, save peer information
-		    if(peerAddress == nullptr){
-                peerAddress = new QHostAddress(sender);
-                peerPort = new quint16(senderPort);
-
-                qDebug() << "My current peer is now: " + QString::number(*peerPort);
-		    }
+		if(mySocket->readDatagram(datagram.data(), datagram.size(), &source, &sourcePort) != -1){
 
 		    // Pick a new peer if no response in 10 seconds
             //newPeerTimer->start(10000);
 
-		    deserializeMessage(datagram);
+		    // Deserialize the message
+            QDataStream inStream(&datagram, QIODevice::ReadOnly);
+            QVariantMap inMap;
+            inStream >> inMap;
+
+            if(inMap.contains("ChatText"))
+                receiveRumorMessage(inMap, sourcePort);
+            else if (inMap.contains("Want")){
+
+                // If received a status message from the peer I sent a rumor to, stop the resend timer
+                if(sourcePort == lastRumorPort)
+                    resendTimer->stop();
+
+                receiveStatusMessage(inMap);
+            }
 		}
 	}
 }
 
-void ChatDialog::deserializeMessage(QByteArray datagram) {
+void ChatDialog::receiveRumorMessage(QVariantMap inMap, quint16 sourcePort){
 
-	QDataStream inStream(&datagram, QIODevice::ReadOnly);
-	QVariantMap inMap;
-	inStream >> inMap;
-
-    if(inMap.contains("ChatText"))
-    	receiveRumorMessage(inMap);
-    else if (inMap.contains("Want"))
-		receiveStatusMessage(inMap);
-
-}
-
-void ChatDialog::receiveRumorMessage(QVariantMap inMap){
-
-    qDebug() << "I got a rumor message!";
-
-    // TROUBLESHOOT HERE
+    //qDebug() << "I got a rumor message!";
 
 	QString origin = inMap.value("Origin").value <QString> ();
 	quint32 seqNo = inMap.value("SeqNo").value <quint32> ();
@@ -204,28 +197,34 @@ void ChatDialog::receiveRumorMessage(QVariantMap inMap){
             //qDebug() << "Status map: expecting next seq num: " + QString::number(statusMap[origin].value <quint32> ());
 		}
 	}
-	sendStatusMessage();
+
+	sendStatusMessage(sourcePort);
+
 }
 
-void ChatDialog::sendStatusMessage(){
+void ChatDialog::sendStatusMessage(quint16 destPort){
 
 	QVariantMap statusMessage;
 	statusMessage.insert(QString("Want"), statusMap);
-	serializeMessage(statusMessage);
+	serializeMessage(statusMessage, destPort);
 
 }
 
 void ChatDialog::receiveStatusMessage(QVariantMap inMap){
 
-    //qDebug() << "I got a status message!";
+    qDebug() << "I got a status message!";
 
 	QVariantMap recvStatusMap = inMap["Want"].value <QVariantMap> ();
 	QList<QString> recvOriginList = recvStatusMap.keys();
 
 	for(int i=0; i< recvOriginList.count(); i++){
 
-	    //qDebug() << "recvStatusMap origin " + recvOriginList[i] + " with expected seqNo: " +
+	    qDebug() << "recvStatusMap origin " + recvOriginList[i] + " with expected seqNo: " +
 	    QString::number(recvStatusMap[recvOriginList[i]].value <quint32> ());
+
+
+
+
 	}
 }
 
