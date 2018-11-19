@@ -76,10 +76,6 @@ private:
     QString lastRumorOrigin;
     quint32 lastRumorSeqNo;
 
-
-
-
-
     quint16 pickRandomNeighbor();
     void sendRumorMessage(QString origin, quint32 seqNo, quint16 destPort);
     void serializeMessage(QVariantMap &myMap, quint16 destPort);

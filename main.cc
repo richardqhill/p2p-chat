@@ -10,7 +10,7 @@ ChatDialog::ChatDialog(){
 		myPort = mySocket->port;
 	}
 
-	mySeqNo = 0;
+	mySeqNo = 1;  // CHANGE TO 1
     qsrand(QTime::currentTime().msec());
 	myOrigin = QString::number(qrand() % 100 + 1) + QString::number(0) + QString::number(myPort);
 
@@ -71,17 +71,22 @@ void ChatDialog::gotReturnPressed(){
 
 quint16 ChatDialog::pickRandomNeighbor() {
 
+    quint16 neighborPort;
+
     if(myPort == mySocket->myPortMin)
-        return myPort+1;
+        neighborPort = myPort+1;
 
     else if(myPort == mySocket->myPortMax)
-        return myPort-1;
+        neighborPort = myPort-1;
 
     else if (qrand() % 2 == 0)
-        return myPort+1;
+        neighborPort = myPort+1;
 
     else
-        return myPort-1;
+        neighborPort = myPort-1;
+
+    qDebug() << "Picked neighbor " + QString::number(neighborPort);
+    return neighborPort;
 }
 
 void ChatDialog::sendRumorMessage(QString origin, quint32 seqNo, quint16 destPort){
@@ -199,6 +204,14 @@ void ChatDialog::receiveStatusMessage(QVariantMap inMap, quint16 sourcePort){
 
 	QVariantMap recvStatusMap = inMap["Want"].value <QVariantMap> ();
 	QList<QString> recvOriginList = recvStatusMap.keys();
+    QList<QString> myOriginList = statusMap.keys();
+
+	for(int i=0; i < myOriginList.count(); i++){
+	    if(!recvOriginList.contains(myOriginList[i])) {
+            sendRumorMessage(myOriginList[i], 0, sourcePort);
+            return;
+        }
+	}
 
 	for(int i=0; i< recvOriginList.count(); i++){
 
@@ -208,11 +221,21 @@ void ChatDialog::receiveStatusMessage(QVariantMap inMap, quint16 sourcePort){
         if(sourceSeqNoForOrigin == mySeqNoForOrigin)
             break;
 
-        else if(sourceSeqNoForOrigin > mySeqNoForOrigin)
+        else if(sourceSeqNoForOrigin > mySeqNoForOrigin) {
             sendStatusMessage(sourcePort);
+            return;
+        }
 
-        else if(sourceSeqNoForOrigin < mySeqNoForOrigin)
+        else if(sourceSeqNoForOrigin < mySeqNoForOrigin) {
             sendRumorMessage(recvOriginList[i], sourceSeqNoForOrigin, sourcePort);
+            return;
+        }
+    }
+
+    // Neither peer appears to have any messages the other has not yet seen.
+    // Flip a coin: pick new random neighbor to start rumormongering with or ceases the rumormongering process.
+    if (qrand() % 2 == 0){
+        sendStatusMessage(pickRandomNeighbor());
     }
 }
 
