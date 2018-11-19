@@ -19,7 +19,7 @@
 
 
 #define QINT64MAX std::numeric_limits<qint64>::max()
-
+#define SEQNOSTART 1
 
 class NetSocket : public QUdpSocket
 {

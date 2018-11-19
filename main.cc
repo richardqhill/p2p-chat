@@ -69,9 +69,9 @@ void ChatDialog::gotReturnPressed(){
 	textline->clear();
 }
 
-
 quint16 ChatDialog::pickClosestNeighbor(){
 
+    int maxAttempts = 10;
     quint16 neighborPort;
 
     if(myPort == mySocket->myPortMin)
@@ -80,42 +80,46 @@ quint16 ChatDialog::pickClosestNeighbor(){
     else if(myPort == mySocket->myPortMax)
         neighborPort = myPort-1;
 
+    else{
+        quint16 n1 = myPort + 1;
+        quint16 n2 = myPort - 1;
 
-    quint16 n1 = myPort+1;
-    quint16 n2 = myPort-1;
+        n1Timer = new QElapsedTimer();
+        n1Timer->start();
+        n2Timer = new QElapsedTimer();
+        n2Timer->start();
 
-    n1Timer = new QElapsedTimer();
-    n1Timer->start();
-    n2Timer = new QElapsedTimer();
-    n2Timer->start();
+        QVariantMap pingMapN1, pingMapN2;
+        pingMapN1.insert(QString("Ping"), QVariant(1));
+        pingMapN2.insert(QString("Ping"), QVariant(2));
 
-    QVariantMap pingMapN1, pingMapN2;
-    pingMapN1.insert(QString("Ping"),QVariant(1));
-    pingMapN2.insert(QString("Ping"),QVariant(2));
+        // It's possible not to get a response from one neighbor or both neighbors
+        int attempts = 0;
+        while (n1Time == QINT64MAX && n2Time == QINT64MAX && attempts <= maxAttempts) {
+            qDebug() << "Sending pings to both neighbors";
+            serializeMessage(pingMapN1, n1);
+            serializeMessage(pingMapN2, n2);
+            processPendingDatagrams();
+            attempts++;
+        }
 
+        qDebug() << "N1 response took" << QString::number(n1Time) << "milliseconds";
+        qDebug() << "N2 response took" << QString::number(n2Time) << "milliseconds";
 
-    // It's possible not not get a response from a neighbor
-    while(n1Time == QINT64MAX && n2Time == QINT64MAX){
-        qDebug() << "Sending pings to both neighbors";
-        serializeMessage(pingMapN1, n1);
-        serializeMessage(pingMapN2, n2);
-        processPendingDatagrams();
+        if(attempts == maxAttempts)
+            neighborPort = pickRandomNeighbor();
+        else if (n1Time < n2Time)
+            neighborPort = n1;
+        else
+            neighborPort = n2;
+
+        attempts = 0;
+        delete n1Timer;
+        delete n2Timer;
+        n1Time = QINT64MAX;
+        n2Time = QINT64MAX;
     }
-
-    qDebug() << "N1 response took" << QString::number(n1Time) << "milliseconds";
-    qDebug() << "N2 response took" << QString::number(n2Time) << "milliseconds";
-
-    if(n1Time < n2Time)
-        neighborPort = n1;
-    else
-        neighborPort = n2;
-
     qDebug() << "Picked neighbor" << QString::number(neighborPort);
-
-    delete n1Timer;
-    delete n2Timer;
-    n1Time = QINT64MAX;
-    n2Time = QINT64MAX;
     return neighborPort;
 }
 
@@ -150,6 +154,7 @@ void ChatDialog::sendRumorMessage(QString origin, quint32 seqNo, quint16 destPor
 	rumorMap.insert(QString("SeqNo"), seqNo);
 
 	qDebug() << "Sending Origin/seqNo " + origin + "/" + QString::number(seqNo) + " to: " + QString::number(destPort);
+
 	serializeMessage(rumorMap, destPort);
 
     // Start Timer looking for response
@@ -174,7 +179,7 @@ void ChatDialog::antiEntropy() {
 }
 
 void ChatDialog::resendRumor(){
-    qDebug() << "Resending rumor because no status message!";
+    qDebug() << "Resending rumor because no status message reply!";
     sendRumorMessage(lastRumorOrigin, lastRumorSeqNo, lastRumorPort);
 }
 
@@ -194,11 +199,12 @@ void ChatDialog::processPendingDatagrams(){
 
             // If we receive Ping, send Ping Reply
             if(inMap.contains("Ping")){
+
+                qDebug() << "Sending PingReply!";
+
                 QVariantMap pingReply;
                 pingReply.insert(QString("PingReply"),inMap["Ping"]);
                 serializeMessage(pingReply, sourcePort);
-
-                qDebug() << "Sending PingReply!";
             }
 
             // If we receive Ping Reply, update timers
@@ -237,17 +243,15 @@ void ChatDialog::receiveRumorMessage(QVariantMap inMap, quint16 sourcePort){
 	quint32 seqNo = inMap.value("SeqNo").value <quint32> ();
 	QString msg = inMap.value("ChatText").value <QString> ();
 
-
     qDebug() << "I got a rumor message: " + msg + " from: " + QString::number(sourcePort);
 
 	QMap<quint32, QString> chatLogEntry;
 	chatLogEntry.insert(seqNo, msg);
 
-
 	// For convenience, do not store any message with OOO seq number but reply with status message
 	// If chatLogs does not contain messages from this origin, we expect message with seqNo 1
 	if(!chatLogs.contains(origin)){
-		if(seqNo != 1) {
+		if(seqNo != SEQNOSTART) {
             sendStatusMessage(sourcePort);
             sendRumorMessage(origin, seqNo, pickRandomNeighbor());
             return;
@@ -292,7 +296,7 @@ void ChatDialog::receiveStatusMessage(QVariantMap inMap, quint16 sourcePort){
 
 	for(int i=0; i < myOriginList.count(); i++){
 	    if(!recvOriginList.contains(myOriginList[i])) {
-            sendRumorMessage(myOriginList[i], 1, sourcePort);
+            sendRumorMessage(myOriginList[i], SEQNOSTART, sourcePort);
             return;
         }
 	}
@@ -311,8 +315,10 @@ void ChatDialog::receiveStatusMessage(QVariantMap inMap, quint16 sourcePort){
         }
 
         else if(sourceSeqNoForOrigin < mySeqNoForOrigin) {
+
+            // 0 means sourceMap is empty for this Origin since seqNo starts at 1!
             if(sourceSeqNoForOrigin == 0)
-                sendRumorMessage(recvOriginList[i], 1, sourcePort); // tricky!! :)
+                sendRumorMessage(recvOriginList[i], SEQNOSTART, sourcePort);
             else
                 sendRumorMessage(recvOriginList[i], sourceSeqNoForOrigin, sourcePort);
             return;
@@ -325,7 +331,6 @@ void ChatDialog::receiveStatusMessage(QVariantMap inMap, quint16 sourcePort){
         sendStatusMessage(pickRandomNeighbor());
     }
 }
-
 
 /* Pick a range of four UDP ports to try to allocate by default, computed based on my Unix user ID.*/
 NetSocket::NetSocket(){
