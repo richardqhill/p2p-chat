@@ -17,8 +17,8 @@
 #include <stdlib.h>
 #include <limits>
 
-#define QINT64MAX std::numeric_limits<qint64>::max()
 
+#define QINT64MAX std::numeric_limits<qint64>::max()
 
 
 class NetSocket : public QUdpSocket
@@ -26,20 +26,10 @@ class NetSocket : public QUdpSocket
     Q_OBJECT
 
 public:
-
     NetSocket();
-
-    // Bind this socket to a P2Papp-specific default port.
-    bool bind();
-
+    bool bind(); // Bind this socket to a P2Papp-specific default port.
     quint16 myPortMin, myPortMax, port;
-
-private:
-
 };
-
-#define EXPECTING_STATUS_MESSAGE 1
-
 
 class ChatDialog : public QDialog
 {
@@ -69,8 +59,6 @@ private:
     qint64 n1Time = QINT64MAX;
     qint64 n2Time = QINT64MAX;
 
-
-
     quint16 myPort;
     QString myOrigin;
     quint32 mySeqNo;
@@ -94,7 +82,6 @@ private:
     void receiveRumorMessage(QVariantMap inMap, quint16 sourcePort);
     void sendStatusMessage(quint16 destPort);
     void receiveStatusMessage(QVariantMap inMap, quint16 sourcePort);
-
 
 };
 

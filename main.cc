@@ -93,22 +93,14 @@ quint16 ChatDialog::pickClosestNeighbor(){
     pingMapN1.insert(QString("Ping"),QVariant(1));
     pingMapN2.insert(QString("Ping"),QVariant(2));
 
-    for(int i=0; i<10; i++){
+
+    // It's possible not not get a response from a neighbor
+    while(n1Time == QINT64MAX && n2Time == QINT64MAX){
+        qDebug() << "Sending pings to both neighbors";
         serializeMessage(pingMapN1, n1);
         serializeMessage(pingMapN2, n2);
+        processPendingDatagrams();
     }
-
-    sleep(1);
-
-
-    /*// It's possible not not get a response from a neighbor
-    while(n1Time == QINT64MAX || n2Time == QINT64MAX){
-
-
-        qDebug() << "Sending pings to both neighbors";
-
-
-    }*/
 
     qDebug() << "N1 response took" << QString::number(n1Time) << "milliseconds";
     qDebug() << "N2 response took" << QString::number(n2Time) << "milliseconds";
@@ -122,8 +114,8 @@ quint16 ChatDialog::pickClosestNeighbor(){
 
     delete n1Timer;
     delete n2Timer;
-    n1Time = -1;
-    n2Time = -1;
+    n1Time = QINT64MAX;
+    n2Time = QINT64MAX;
     return neighborPort;
 }
 
@@ -205,10 +197,15 @@ void ChatDialog::processPendingDatagrams(){
                 QVariantMap pingReply;
                 pingReply.insert(QString("PingReply"),inMap["Ping"]);
                 serializeMessage(pingReply, sourcePort);
+
+                qDebug() << "Sending PingReply!";
             }
 
             // If we receive Ping Reply, update timers
             else if(inMap.contains("PingReply")){
+
+                qDebug() << "Received Ping Reply: " << inMap["PingReply"];
+
                 if(inMap["PingReply"] == QVariant(1)) {
                     if(n1Time == QINT64MAX)
                         n1Time = n1Timer->elapsed();
