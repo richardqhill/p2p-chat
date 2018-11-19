@@ -86,7 +86,7 @@ private:
     void deserializeMessage(QByteArray datagram);
     void receiveRumorMessage(QVariantMap inMap, quint16 sourcePort);
     void sendStatusMessage(quint16 destPort);
-    void receiveStatusMessage(QVariantMap inMap);
+    void receiveStatusMessage(QVariantMap inMap, quint16 sourcePort);
 
 
 };
