@@ -63,10 +63,68 @@ void ChatDialog::gotReturnPressed(){
 		statusMap[myOrigin] = QVariant(mySeqNo + 1);
 	}
 
-	sendRumorMessage(myOrigin, mySeqNo, pickRandomNeighbor());
+	sendRumorMessage(myOrigin, mySeqNo, pickClosestNeighbor());
 	mySeqNo += 1;
 
 	textline->clear();
+}
+
+
+quint16 ChatDialog::pickClosestNeighbor(){
+
+    quint16 neighborPort;
+
+    if(myPort == mySocket->myPortMin)
+        neighborPort = myPort+1;
+
+    else if(myPort == mySocket->myPortMax)
+        neighborPort = myPort-1;
+
+
+    quint16 n1 = myPort+1;
+    quint16 n2 = myPort-1;
+
+    n1Timer = new QElapsedTimer();
+    n1Timer->start();
+    n2Timer = new QElapsedTimer();
+    n2Timer->start();
+
+    QVariantMap pingMapN1, pingMapN2;
+    pingMapN1.insert(QString("Ping"),QVariant(1));
+    pingMapN2.insert(QString("Ping"),QVariant(2));
+
+    for(int i=0; i<10; i++){
+        serializeMessage(pingMapN1, n1);
+        serializeMessage(pingMapN2, n2);
+    }
+
+    sleep(1);
+
+
+    /*// It's possible not not get a response from a neighbor
+    while(n1Time == QINT64MAX || n2Time == QINT64MAX){
+
+
+        qDebug() << "Sending pings to both neighbors";
+
+
+    }*/
+
+    qDebug() << "N1 response took" << QString::number(n1Time) << "milliseconds";
+    qDebug() << "N2 response took" << QString::number(n2Time) << "milliseconds";
+
+    if(n1Time < n2Time)
+        neighborPort = n1;
+    else
+        neighborPort = n2;
+
+    qDebug() << "Picked neighbor" << QString::number(neighborPort);
+
+    delete n1Timer;
+    delete n2Timer;
+    n1Time = -1;
+    n2Time = -1;
+    return neighborPort;
 }
 
 quint16 ChatDialog::pickRandomNeighbor() {
@@ -142,7 +200,26 @@ void ChatDialog::processPendingDatagrams(){
             QVariantMap inMap;
             inStream >> inMap;
 
-            if(inMap.contains("ChatText"))
+            // If we receive Ping, send Ping Reply
+            if(inMap.contains("Ping")){
+                QVariantMap pingReply;
+                pingReply.insert(QString("PingReply"),inMap["Ping"]);
+                serializeMessage(pingReply, sourcePort);
+            }
+
+            // If we receive Ping Reply, update timers
+            else if(inMap.contains("PingReply")){
+                if(inMap["PingReply"] == QVariant(1)) {
+                    if(n1Time == QINT64MAX)
+                        n1Time = n1Timer->elapsed();
+                }
+                else {
+                    if(n2Time == QINT64MAX)
+                        n2Time = n2Timer->elapsed();
+                }
+            }
+
+            else if(inMap.contains("ChatText"))
                 receiveRumorMessage(inMap, sourcePort);
 
             else if(inMap.contains("Want")){
